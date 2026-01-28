@@ -15,18 +15,19 @@ class FileTransferService {
 
     _server = await shelf_io.serve(handler, InternetAddress.anyIPv4, port);
 
-    print('HTTP Server running on port $port');
+    print('🌐 HTTP Server running on port $port');
   }
 
   /// Stops the HTTP server
   Future<void> stopServer() async {
     await _server?.close(force: true);
-    print('HTTP Server stopped');
+    print('🛑 HTTP Server stopped');
   }
 
   /// Router
   Future<Response> _router(Request request) async {
     if (request.method == 'POST' && request.url.path == 'upload') {
+      print('📥 Incoming upload request');
       return _handleUpload(request);
     }
 
@@ -36,18 +37,25 @@ class FileTransferService {
   /// Handle file upload
   Future<Response> _handleUpload(Request request) async {
     final filename = request.headers['x-filename'];
-    if (filename == null) {
+
+    if (filename == null || filename.isEmpty) {
+      print('❌ Missing filename header');
       return Response.badRequest(body: 'Missing filename');
     }
 
     final dir = await getApplicationDocumentsDirectory();
-    final file = File('${dir.path}/$filename');
+    final filePath = '${dir.path}/$filename';
+    final file = File(filePath);
     final sink = file.openWrite();
 
     await request.read().forEach(sink.add);
     await sink.close();
 
-    print('File received: ${file.path}');
-    return Response.ok(jsonEncode({'status': 'success'}));
+    print('✅ File received and saved at: $filePath');
+
+    return Response.ok(
+      jsonEncode({'status': 'success'}),
+      headers: {'Content-Type': 'application/json'},
+    );
   }
 }
