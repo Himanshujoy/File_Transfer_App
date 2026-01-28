@@ -7,11 +7,10 @@ import '../../utils/network_utils.dart';
 import 'discovery_service.dart';
 
 class MdnsDiscoveryService implements DiscoveryService {
-  /// ✅ Bonsoir service type (NO trailing dot)
   static const String serviceType = '_filetransfer._tcp';
 
-  /// Unique service name (prevents self-conflicts)
-  final String _serviceName = 'FlutterFileTransfer-${Platform.localHostname}';
+  final String _serviceName =
+      'FlutterFileTransfer-${Platform.localHostname}-${DateTime.now().millisecondsSinceEpoch}';
 
   final StreamController<List<PeerDevice>> _peerController =
       StreamController<List<PeerDevice>>.broadcast();
@@ -20,6 +19,7 @@ class MdnsDiscoveryService implements DiscoveryService {
 
   BonsoirDiscovery? _discovery;
   BonsoirBroadcast? _broadcast;
+  String? _localIp;
 
   bool _started = false;
 
@@ -28,8 +28,10 @@ class MdnsDiscoveryService implements DiscoveryService {
     if (_started) return;
     _started = true;
 
+    _localIp = await NetworkUtils.getLocalIp();
+
     /// ---------------------------
-    /// 🔊 BROADCAST (ADVERTISEMENT)
+    /// 🔊 BROADCAST
     /// ---------------------------
     _broadcast = BonsoirBroadcast(
       service: BonsoirService(
@@ -40,74 +42,67 @@ class MdnsDiscoveryService implements DiscoveryService {
       ),
     );
 
-    await _broadcast!.initialize(); // REQUIRED on iOS
+    await _broadcast!.initialize();
     await _broadcast!.start();
 
     /// ---------------------------
     /// 🔍 DISCOVERY
     /// ---------------------------
     _discovery = BonsoirDiscovery(type: serviceType);
-    await _discovery!.initialize(); // REQUIRED on iOS
-    await _discovery!.start(); // ✅ START FIRST (important on iOS)
+    await _discovery!.initialize();
+    await _discovery!.start();
 
+    /// 🔥 EMIT EMPTY LIST (CRITICAL FOR iOS UI)
     _peerController.add([]);
 
     _discovery!.eventStream!.listen((event) async {
-      /// Service found → resolve
+      // Service found → resolve
       if (event is BonsoirDiscoveryServiceFoundEvent) {
         await event.service.resolve(_discovery!.serviceResolver);
         return;
       }
 
-      /// Service resolved
+      // Service resolved
       if (event is BonsoirDiscoveryServiceResolvedEvent) {
         final service = event.service;
 
-        // ❌ Ignore self
-        if (service.name == _serviceName) return;
-
         if (service.host == null || service.port == null) return;
 
-        // ❌ Ignore localhost / loopback
-        if (service.host == 'localhost' ||
-            service.host == '127.0.0.1' ||
-            service.host == '::1') {
-          return;
-        }
-
-        // Resolve .local → IPv4
         final ip = await NetworkUtils.resolveHostToIp(service.host!);
         if (ip == null) return;
 
-        // ❌ Ignore IPv6 (Android HTTP upload fails)
+        // Ignore IPv6
         if (ip.contains(':')) return;
 
-        // ✅ Deduplicate
-        if (_devices.containsKey(service.name)) return;
+        // ❌ Ignore self by IP (CRITICAL FIX FOR iOS)
+        if (_localIp != null && ip == _localIp) return;
+
+        final id = '$ip:${service.port}';
+
+        // Deduplicate by IP:PORT (NOT name)
+        if (_devices.containsKey(id)) return;
 
         final device = PeerDevice(
-          id: service.name,
+          id: id,
           name: service.attributes?['name'] ?? service.name,
           host: service.host!,
           ip: ip,
           port: service.port!,
         );
 
-        _devices[device.id] = device;
+        _devices[id] = device;
         _peerController.add(_devices.values.toList());
 
-        print('📡 Found device: ${device.name} @ ${device.ip}:${device.port}');
+        print('📡 Found device: ${device.name} @ $ip:${service.port}');
       }
 
-      /// Service lost
+      // Service lost
       if (event is BonsoirDiscoveryServiceLostEvent) {
-        _devices.remove(event.service.name);
+        _devices.removeWhere((_, d) => d.name == event.service.name);
         _peerController.add(_devices.values.toList());
         print('📴 Lost device: ${event.service.name}');
       }
     });
-
-    print('✅ mDNS broadcast + discovery started');
   }
 
   @override
@@ -119,8 +114,6 @@ class MdnsDiscoveryService implements DiscoveryService {
     _peerController.add([]);
 
     _started = false;
-
-    print('🛑 mDNS broadcast + discovery stopped');
   }
 
   @override
