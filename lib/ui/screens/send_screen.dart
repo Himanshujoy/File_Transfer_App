@@ -65,7 +65,7 @@ class SendScreen extends StatelessWidget {
       ScaffoldMessenger.of(
         context,
       ).showSnackBar(const SnackBar(content: Text('Sending file...')));
-
+      print('🧭 Ready to send file to: ${peer.ip}:${peer.port}');
       await FileTransferClient.sendFile(file: file, peer: peer);
 
       ScaffoldMessenger.of(

@@ -1,6 +1,5 @@
-import 'dart:convert';
 import 'dart:io';
-
+import 'package:dio/dio.dart';
 import '../../models/peer_device.dart';
 
 class FileTransferClient {
@@ -8,15 +7,43 @@ class FileTransferClient {
     required File file,
     required PeerDevice peer,
   }) async {
-    final request = await HttpClient().post(peer.ip, peer.port, '/upload');
+    try {
+      // Resolve hostname to IPv4 (ensures no .local or IPv6)
+      final addresses = await InternetAddress.lookup(peer.ip);
+      final ipv4 = addresses.firstWhere(
+        (addr) => addr.type == InternetAddressType.IPv4,
+        orElse: () => throw Exception('No IPv4 address found'),
+      );
 
-    request.headers.set('x-filename', file.uri.pathSegments.last);
-    request.add(await file.readAsBytes());
+      final url = 'http://${ipv4.address}:${peer.port}/upload';
 
-    final response = await request.close();
+      print('📤 Sending to $url');
 
-    if (response.statusCode != 200) {
-      throw Exception('File transfer failed');
+      final dio = Dio();
+
+      final formData = FormData.fromMap({
+        'file': await MultipartFile.fromFile(
+          file.path,
+          filename: file.uri.pathSegments.last,
+        ),
+      });
+
+      final response = await dio.post(
+        url,
+        data: formData,
+        options: Options(
+          headers: {'x-filename': file.uri.pathSegments.last},
+          contentType: 'multipart/form-data',
+        ),
+      );
+
+      if (response.statusCode == 200) {
+        print('📦 File sent successfully');
+      } else {
+        print('❗ Upload failed: ${response.statusCode}');
+      }
+    } catch (e) {
+      print('🔥 sendFile error: $e');
     }
   }
 }

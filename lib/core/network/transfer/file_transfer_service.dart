@@ -48,24 +48,43 @@ class FileTransferService {
 
   /// Handle incoming file upload
   Future<Response> _handleUpload(Request request) async {
-    final filename = request.headers['x-filename'];
+    IOSink? sink;
 
-    if (filename == null || filename.isEmpty) {
-      return Response.badRequest(body: 'Missing filename');
+    try {
+      final filename = request.headers['x-filename'];
+
+      if (filename == null || filename.isEmpty) {
+        return Response.badRequest(body: 'Missing filename');
+      }
+
+      final dir = await getApplicationDocumentsDirectory();
+      final file = File('${dir.path}/$filename');
+
+      sink = file.openWrite();
+
+      // ✅ CORRECT streaming
+      await request.read().pipe(sink);
+
+      await sink.flush();
+      await sink.close();
+
+      print('📥 File received: ${file.path}');
+
+      return Response.ok(
+        jsonEncode({'status': 'success', 'path': file.path}),
+        headers: {'Content-Type': 'application/json'},
+      );
+    } catch (e, stack) {
+      print('❌ Upload failed: $e');
+      print(stack);
+
+      await sink?.close();
+
+      return Response.internalServerError(
+        body: jsonEncode({'status': 'error', 'message': e.toString()}),
+        headers: {'Content-Type': 'application/json'},
+      );
     }
-
-    final dir = await getApplicationDocumentsDirectory();
-    final file = File('${dir.path}/$filename');
-
-    final sink = file.openWrite();
-    await request.read().pipe(sink);
-
-    print('📥 File received: ${file.path}');
-
-    return Response.ok(
-      jsonEncode({'status': 'success', 'path': file.path}),
-      headers: {'Content-Type': 'application/json'},
-    );
   }
 
   /// Optional: expose port (useful for mDNS)

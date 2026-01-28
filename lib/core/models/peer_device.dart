@@ -16,4 +16,7 @@ class PeerDevice {
     required this.ip,
     required this.port,
   });
+
+  @override
+  String toString() => 'PeerDevice(name: $name, ip: $ip, port: $port)';
 }
