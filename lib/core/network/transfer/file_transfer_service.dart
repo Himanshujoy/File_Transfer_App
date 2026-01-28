@@ -8,54 +8,66 @@ import 'package:shelf/shelf_io.dart' as shelf_io;
 
 class FileTransferService {
   HttpServer? _server;
+  int? _port;
 
-  /// Starts local HTTP server to receive files
+  /// Start HTTP file-receiving server
   Future<void> startServer({int port = 8080}) async {
+    if (_server != null) return;
+
     final handler = Pipeline().addMiddleware(logRequests()).addHandler(_router);
 
-    _server = await shelf_io.serve(handler, InternetAddress.anyIPv4, port);
+    _server = await shelf_io.serve(
+      handler,
+      InternetAddress.anyIPv4, // ✅ REQUIRED
+      port,
+    );
 
+    _port = port;
     print('🌐 HTTP Server running on port $port');
   }
 
-  /// Stops the HTTP server
+  /// Stop server
   Future<void> stopServer() async {
-    await _server?.close(force: true);
+    if (_server == null) return;
+
+    await _server!.close(force: true);
+    _server = null;
+    _port = null;
+
     print('🛑 HTTP Server stopped');
   }
 
   /// Router
   Future<Response> _router(Request request) async {
     if (request.method == 'POST' && request.url.path == 'upload') {
-      print('📥 Incoming upload request');
       return _handleUpload(request);
     }
 
     return Response.notFound('Not Found');
   }
 
-  /// Handle file upload
+  /// Handle incoming file upload
   Future<Response> _handleUpload(Request request) async {
     final filename = request.headers['x-filename'];
 
     if (filename == null || filename.isEmpty) {
-      print('❌ Missing filename header');
       return Response.badRequest(body: 'Missing filename');
     }
 
     final dir = await getApplicationDocumentsDirectory();
-    final filePath = '${dir.path}/$filename';
-    final file = File(filePath);
+    final file = File('${dir.path}/$filename');
+
     final sink = file.openWrite();
+    await request.read().pipe(sink);
 
-    await request.read().forEach(sink.add);
-    await sink.close();
-
-    print('✅ File received and saved at: $filePath');
+    print('📥 File received: ${file.path}');
 
     return Response.ok(
-      jsonEncode({'status': 'success'}),
+      jsonEncode({'status': 'success', 'path': file.path}),
       headers: {'Content-Type': 'application/json'},
     );
   }
+
+  /// Optional: expose port (useful for mDNS)
+  int? get port => _port;
 }

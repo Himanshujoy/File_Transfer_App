@@ -49,6 +49,13 @@ class SendScreen extends StatelessWidget {
   }
 
   Future<void> _onSendTapped(BuildContext context, PeerDevice peer) async {
+    if (peer.ip.isEmpty) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Invalid peer IP')));
+      return;
+    }
+
     try {
       final result = await FilePicker.platform.pickFiles();
       if (result == null || result.files.single.path == null) return;
@@ -59,28 +66,12 @@ class SendScreen extends StatelessWidget {
         context,
       ).showSnackBar(const SnackBar(content: Text('Sending file...')));
 
-      // 🔥 IMPORTANT: Resolve .local hostnames to IP
-      String host = peer.ip;
-      if (host.endsWith('.local')) {
-        final addresses = await InternetAddress.lookup(host);
-        host = addresses.first.address;
-      }
-
-      final resolvedPeer = peer.copyWith(ip: host);
-
-      debugPrint(
-        '📤 Sending to http://${resolvedPeer.ip}:${resolvedPeer.port}/upload',
-      );
-
-      await FileTransferClient.sendFile(file: file, peer: resolvedPeer);
+      await FileTransferClient.sendFile(file: file, peer: peer);
 
       ScaffoldMessenger.of(
         context,
       ).showSnackBar(const SnackBar(content: Text('File sent successfully')));
-    } catch (e, stack) {
-      debugPrint('❌ Send failed: $e');
-      debugPrintStack(stackTrace: stack);
-
+    } catch (e) {
       ScaffoldMessenger.of(
         context,
       ).showSnackBar(SnackBar(content: Text('Failed to send file: $e')));

@@ -2,91 +2,111 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:bonsoir/bonsoir.dart';
-
-import '../../utils/constants.dart';
 import '../../models/peer_device.dart';
+import '../../utils/network_utils.dart';
 import 'discovery_service.dart';
 
 class MdnsDiscoveryService implements DiscoveryService {
-  BonsoirBroadcast? _broadcast;
-  BonsoirDiscovery? _discovery;
+  // ✅ FIX 1: mDNS type MUST end with a dot
+  static const String serviceType = '_filetransfer._tcp';
 
-  bool _started = false;
+  // Unique name to avoid self-collision
+  final String _serviceName = 'FlutterFileTransfer-${Platform.localHostname}';
 
-  final StreamController<List<PeerDevice>> _controller =
+  final StreamController<List<PeerDevice>> _peerController =
       StreamController.broadcast();
 
   final Map<String, PeerDevice> _devices = {};
 
+  BonsoirDiscovery? _discovery;
+  BonsoirBroadcast? _broadcast;
+
+  bool _started = false;
+
+  // ✅ FIX 2: Method name matches DiscoveryService
   @override
-  Future<void> start() async {
+  Future<void> startDiscovery() async {
     if (_started) return;
     _started = true;
 
-    // ---- Advertise this device ----
+    /// ---------------------------
+    /// 🔊 START BROADCAST (ADVERTISEMENT)
+    /// ---------------------------
     _broadcast = BonsoirBroadcast(
       service: BonsoirService(
-        name: Constants.serviceName,
-        type: Constants.serviceType,
-        port: Constants.defaultPort,
+        name: _serviceName,
+        type: serviceType,
+        port: 8080, // must match HTTP server
+        attributes: {'name': _serviceName},
       ),
     );
 
     await _broadcast!.initialize(); // REQUIRED on iOS
-    _broadcast!.start();
+    await _broadcast!.start();
 
-    // ---- Discover other devices ----
-    _discovery = BonsoirDiscovery(type: Constants.serviceType);
+    /// ---------------------------
+    /// 🔍 START DISCOVERY
+    /// ---------------------------
+    _discovery = BonsoirDiscovery(type: serviceType);
     await _discovery!.initialize(); // REQUIRED on iOS
 
-    _discovery!.eventStream!.listen(_onEvent);
-    _discovery!.start();
+    _discovery!.eventStream!.listen((event) async {
+      // Service found → resolve
+      if (event is BonsoirDiscoveryServiceFoundEvent) {
+        await event.service.resolve(_discovery!.serviceResolver);
+        return;
+      }
 
-    print('✅ mDNS initialized & started');
+      // Service resolved
+      if (event is BonsoirDiscoveryServiceResolvedEvent) {
+        final service = event.service;
+
+        // Avoid discovering self
+        if (service.name == _serviceName) return;
+
+        if (service.host == null || service.port == null) return;
+
+        final ip = await NetworkUtils.resolveHostToIp(service.host!);
+        if (ip == null) return;
+
+        final device = PeerDevice(
+          id: service.name,
+          name: service.attributes?['name'] ?? service.name,
+          host: service.host!,
+          ip: ip,
+          port: service.port!,
+        );
+
+        _devices[device.id] = device;
+        _peerController.add(_devices.values.toList());
+
+        print('📡 Found device: ${device.name} @ $ip:${device.port}');
+      }
+
+      // Service lost
+      if (event is BonsoirDiscoveryServiceLostEvent) {
+        _devices.remove(event.service.name);
+        _peerController.add(_devices.values.toList());
+        print('📴 Lost device: ${event.service.name}');
+      }
+    });
+
+    await _discovery!.start();
+    print('✅ mDNS broadcast + discovery started');
   }
 
-  Future<void> _onEvent(BonsoirDiscoveryEvent event) async {
-    if (event is BonsoirDiscoveryServiceFoundEvent) {
-      final service = event.service;
-
-      await service.resolve(_discovery!.serviceResolver);
-
-      if (service.host == null || service.port == null) return;
-
-      final device = PeerDevice(
-        id: service.name,
-        name: service.name,
-        ip: service.host!,
-        port: service.port!,
-      );
-
-      _devices[device.id] = device;
-      _controller.add(_devices.values.toList());
-
-      print('📡 Found device: ${device.name} @ ${device.ip}:${device.port}');
-    }
-
-    if (event is BonsoirDiscoveryServiceLostEvent) {
-      _devices.remove(event.service.name);
-      _controller.add(_devices.values.toList());
-
-      print('📴 Lost device: ${event.service.name}');
-    }
-  }
-
+  // ✅ FIX 3: Method name matches DiscoveryService
   @override
-  Stream<List<PeerDevice>> discoverPeers() => _controller.stream;
+  Future<void> stopDiscovery() async {
+    await _broadcast?.stop();
+    await _discovery?.stop();
 
-  @override
-  void stop() {
-    _broadcast?.stop();
-    _discovery?.stop();
-
-    _broadcast = null;
-    _discovery = null;
     _devices.clear();
     _started = false;
 
-    print('🛑 mDNS stopped');
+    print('🛑 mDNS broadcast + discovery stopped');
   }
+
+  @override
+  Stream<List<PeerDevice>> discoverPeers() => _peerController.stream;
 }

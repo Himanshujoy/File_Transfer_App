@@ -5,6 +5,7 @@ import '../../features/receive/receive_controller.dart';
 import '../../features/send/send_controller.dart';
 import '../../core/models/peer_device.dart';
 import '../../features/pairing/pairing_controller.dart';
+import '../../core/network/discovery/mdns_discovery_service.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -16,94 +17,113 @@ class HomeScreen extends StatefulWidget {
 class _HomeScreenState extends State<HomeScreen> {
   final receiveController = ReceiveController();
   final sendController = SendController();
-  final pairingController = PairingController();
 
-  List<PeerDevice> discoveredDevices = [];
+  late final PairingController pairingController;
   PeerDevice? selectedDevice;
 
   @override
   void initState() {
     super.initState();
-    _startDiscovery();
+
+    pairingController = PairingController(MdnsDiscoveryService());
+    pairingController.startDiscovery();
   }
 
-  void _startDiscovery() {
-    pairingController.startDiscovery().listen((peers) {
-      setState(() => discoveredDevices = peers);
-    });
+  @override
+  void dispose() {
+    pairingController.stopDiscovery();
+    super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('File Transfer Test')),
+      appBar: AppBar(title: const Text('File Transfer')),
       body: Padding(
         padding: const EdgeInsets.all(16),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            // Receiver
-            ElevatedButton(
-              onPressed: () async {
-                await receiveController.startReceiving();
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('Receiving enabled')),
-                );
-              },
-              child: const Text('Start Receiving'),
-            ),
+        child: StreamBuilder<List<PeerDevice>>(
+          // ✅ FIXED: correct stream source
+          stream: pairingController.peersStream,
+          builder: (context, snapshot) {
+            final discoveredDevices = snapshot.data ?? [];
 
-            const SizedBox(height: 24),
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                // ================= RECEIVER =================
+                ElevatedButton.icon(
+                  icon: const Icon(Icons.download),
+                  label: const Text('Start Receiving'),
+                  onPressed: () async {
+                    await receiveController.startReceiving();
+                    if (!mounted) return;
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(content: Text('Receiving enabled')),
+                    );
+                  },
+                ),
 
-            // Device Selector
-            if (discoveredDevices.isNotEmpty)
-              DropdownButton<PeerDevice>(
-                hint: const Text('Select device to send to'),
-                value: selectedDevice,
-                items: discoveredDevices.map((device) {
-                  return DropdownMenuItem(
-                    value: device,
-                    child: Text('${device.name} (${device.ip})'),
-                  );
-                }).toList(),
-                onChanged: (device) {
-                  setState(() => selectedDevice = device);
-                },
-              )
-            else
-              const Text('Discovering devices...'),
+                const SizedBox(height: 24),
 
-            const SizedBox(height: 24),
-
-            // Sender
-            ElevatedButton(
-              onPressed: selectedDevice == null
-                  ? null
-                  : () async {
-                      final result = await FilePicker.platform.pickFiles();
-                      if (result == null) return;
-
-                      final filePath = result.files.single.path!;
-
-                      try {
-                        await sendController.sendFile(
-                          filePath: filePath,
-                          ip: selectedDevice!.ip,
-                          port: selectedDevice!.port,
-                        );
-
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(content: Text('File sent')),
-                        );
-                      } catch (e) {
-                        ScaffoldMessenger.of(
-                          context,
-                        ).showSnackBar(SnackBar(content: Text('Error: $e')));
-                      }
+                // ================= DEVICE PICKER =================
+                if (discoveredDevices.isEmpty)
+                  const Center(child: Text('Discovering devices...'))
+                else
+                  DropdownButtonFormField<PeerDevice>(
+                    value: selectedDevice,
+                    hint: const Text('Select device to send to'),
+                    isExpanded: true,
+                    items: discoveredDevices.map((device) {
+                      return DropdownMenuItem<PeerDevice>(
+                        value: device,
+                        child: Text('${device.name} • ${device.ip}'),
+                      );
+                    }).toList(),
+                    onChanged: (device) {
+                      setState(() => selectedDevice = device);
                     },
-              child: const Text('Pick & Send File'),
-            ),
-          ],
+                    decoration: const InputDecoration(
+                      border: OutlineInputBorder(),
+                    ),
+                  ),
+
+                const SizedBox(height: 24),
+
+                // ================= SENDER =================
+                ElevatedButton.icon(
+                  icon: const Icon(Icons.upload),
+                  label: const Text('Pick & Send File'),
+                  onPressed: selectedDevice == null
+                      ? null
+                      : () async {
+                          final result = await FilePicker.platform.pickFiles();
+                          if (result == null) return;
+
+                          final filePath = result.files.single.path!;
+                          try {
+                            await sendController.sendFile(
+                              filePath: filePath,
+                              ip: selectedDevice!.ip,
+                              port: selectedDevice!.port,
+                            );
+
+                            if (!mounted) return;
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(
+                                content: Text('File sent successfully'),
+                              ),
+                            );
+                          } catch (e) {
+                            if (!mounted) return;
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(content: Text('Error: $e')),
+                            );
+                          }
+                        },
+                ),
+              ],
+            );
+          },
         ),
       ),
     );
