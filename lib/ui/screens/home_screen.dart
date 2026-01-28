@@ -24,14 +24,13 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   void initState() {
     super.initState();
-
     pairingController = PairingController(MdnsDiscoveryService());
-    pairingController.startDiscovery();
+    pairingController.startDiscovery(); // ✅ REQUIRED
   }
 
   @override
   void dispose() {
-    pairingController.stopDiscovery();
+    pairingController.stopDiscovery(); // ✅ REQUIRED
     super.dispose();
   }
 
@@ -42,7 +41,6 @@ class _HomeScreenState extends State<HomeScreen> {
       body: Padding(
         padding: const EdgeInsets.all(16),
         child: StreamBuilder<List<PeerDevice>>(
-          // ✅ FIXED: correct stream source
           stream: pairingController.peersStream,
           builder: (context, snapshot) {
             final discoveredDevices = snapshot.data ?? [];
@@ -50,7 +48,6 @@ class _HomeScreenState extends State<HomeScreen> {
             return Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                // ================= RECEIVER =================
                 ElevatedButton.icon(
                   icon: const Icon(Icons.download),
                   label: const Text('Start Receiving'),
@@ -65,7 +62,6 @@ class _HomeScreenState extends State<HomeScreen> {
 
                 const SizedBox(height: 24),
 
-                // ================= DEVICE PICKER =================
                 if (discoveredDevices.isEmpty)
                   const Center(child: Text('Discovering devices...'))
                 else
@@ -89,7 +85,6 @@ class _HomeScreenState extends State<HomeScreen> {
 
                 const SizedBox(height: 24),
 
-                // ================= SENDER =================
                 ElevatedButton.icon(
                   icon: const Icon(Icons.upload),
                   label: const Text('Pick & Send File'),

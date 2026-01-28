@@ -6,17 +6,22 @@ import '../../core/models/peer_device.dart';
 import '../../core/network/discovery/discovery_service.dart';
 import '../../core/network/transfer/file_transfer_client.dart';
 
-class SendScreen extends StatelessWidget {
+class SendScreen extends StatefulWidget {
   final DiscoveryService discoveryService;
 
   const SendScreen({super.key, required this.discoveryService});
 
   @override
+  State<SendScreen> createState() => _SendScreenState();
+}
+
+class _SendScreenState extends State<SendScreen> {
+  @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(title: const Text('Send File')),
       body: StreamBuilder<List<PeerDevice>>(
-        stream: discoveryService.discoverPeers(),
+        stream: widget.discoveryService.discoverPeers(),
         builder: (context, snapshot) {
           final peers = snapshot.data ?? [];
 
@@ -65,7 +70,7 @@ class SendScreen extends StatelessWidget {
       ScaffoldMessenger.of(
         context,
       ).showSnackBar(const SnackBar(content: Text('Sending file...')));
-      print('🧭 Ready to send file to: ${peer.ip}:${peer.port}');
+
       await FileTransferClient.sendFile(file: file, peer: peer);
 
       ScaffoldMessenger.of(

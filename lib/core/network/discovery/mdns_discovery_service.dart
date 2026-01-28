@@ -50,6 +50,8 @@ class MdnsDiscoveryService implements DiscoveryService {
     await _discovery!.initialize(); // REQUIRED on iOS
     await _discovery!.start(); // ✅ START FIRST (important on iOS)
 
+    _peerController.add([]);
+
     _discovery!.eventStream!.listen((event) async {
       /// Service found → resolve
       if (event is BonsoirDiscoveryServiceFoundEvent) {
