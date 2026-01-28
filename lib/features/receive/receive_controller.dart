@@ -1,9 +1,13 @@
 import '../../core/network/transfer/file_transfer_service.dart';
 
 class ReceiveController {
-  final FileTransferService _transferService = FileTransferService();
+  final FileTransferService _service = FileTransferService();
 
   Future<void> startReceiving() async {
-    await _transferService.receiveFile();
+    await _service.startServer();
+  }
+
+  Future<void> stopReceiving() async {
+    await _service.stopServer();
   }
 }

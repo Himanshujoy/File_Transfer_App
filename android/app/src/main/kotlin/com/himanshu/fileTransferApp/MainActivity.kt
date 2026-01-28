@@ -1,4 +1,4 @@
-package com.example.file_transfer_app
+package com.himanshu.fileTransferApp
 
 import io.flutter.embedding.android.FlutterActivity
 
