@@ -7,14 +7,14 @@ import '../../utils/network_utils.dart';
 import 'discovery_service.dart';
 
 class MdnsDiscoveryService implements DiscoveryService {
-  /// ✅ MUST end with dot
+  /// ✅ Bonsoir service type (NO trailing dot)
   static const String serviceType = '_filetransfer._tcp';
 
-  /// Unique service name to avoid self-discovery
+  /// Unique service name (prevents self-conflicts)
   final String _serviceName = 'FlutterFileTransfer-${Platform.localHostname}';
 
   final StreamController<List<PeerDevice>> _peerController =
-      StreamController.broadcast();
+      StreamController<List<PeerDevice>>.broadcast();
 
   final Map<String, PeerDevice> _devices = {};
 
@@ -48,6 +48,7 @@ class MdnsDiscoveryService implements DiscoveryService {
     /// ---------------------------
     _discovery = BonsoirDiscovery(type: serviceType);
     await _discovery!.initialize(); // REQUIRED on iOS
+    await _discovery!.start(); // ✅ START FIRST (important on iOS)
 
     _discovery!.eventStream!.listen((event) async {
       /// Service found → resolve
@@ -76,7 +77,7 @@ class MdnsDiscoveryService implements DiscoveryService {
         final ip = await NetworkUtils.resolveHostToIp(service.host!);
         if (ip == null) return;
 
-        // ❌ Ignore IPv6 (Android upload will fail)
+        // ❌ Ignore IPv6 (Android HTTP upload fails)
         if (ip.contains(':')) return;
 
         // ✅ Deduplicate
@@ -104,7 +105,6 @@ class MdnsDiscoveryService implements DiscoveryService {
       }
     });
 
-    await _discovery!.start();
     print('✅ mDNS broadcast + discovery started');
   }
 
@@ -114,6 +114,8 @@ class MdnsDiscoveryService implements DiscoveryService {
     await _discovery?.stop();
 
     _devices.clear();
+    _peerController.add([]);
+
     _started = false;
 
     print('🛑 mDNS broadcast + discovery stopped');

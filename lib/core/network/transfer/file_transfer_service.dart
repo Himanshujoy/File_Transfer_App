@@ -62,10 +62,9 @@ class FileTransferService {
 
       sink = file.openWrite();
 
-      // ✅ CORRECT streaming
+      // ✅ Correct Shelf streaming
       await request.read().pipe(sink);
 
-      await sink.flush();
       await sink.close();
 
       print('📥 File received: ${file.path}');
