@@ -52,7 +52,7 @@ class _HomeScreenState extends State<HomeScreen> {
             ),
             ListTile(
               leading: const Icon(Icons.photo),
-              title: const Text('Send from Photos'),
+              title: const Text('Send from Photos & Videos'),
               onTap: () {
                 Navigator.pop(context);
                 _sendFromPhotos(context, peer);
@@ -90,19 +90,28 @@ class _HomeScreenState extends State<HomeScreen> {
   Future<void> _sendFromPhotos(BuildContext context, PeerDevice peer) async {
     try {
       final picker = ImagePicker();
-      final image = await picker.pickImage(source: ImageSource.gallery);
-      if (image == null) return;
+
+      // Let user choose image OR video
+      final XFile? media = await picker.pickMedia();
+
+      if (media == null) return;
 
       await sendController.sendFile(
-        filePath: image.path,
+        filePath: media.path,
         ip: peer.ip,
         port: peer.port,
       );
 
       if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('Image sent successfully')));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            media.mimeType?.startsWith('video') == true
+                ? 'Video sent successfully'
+                : 'Photo sent successfully',
+          ),
+        ),
+      );
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(
