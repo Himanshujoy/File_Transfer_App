@@ -1,3 +1,4 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:image_picker/image_picker.dart';
@@ -17,25 +18,32 @@ class HomeScreen extends StatefulWidget {
 
 class _HomeScreenState extends State<HomeScreen> {
   final receiveController = ReceiveController();
-  final sendController = SendController();
 
   late final PairingController pairingController;
   PeerDevice? selectedDevice;
+  SendController? sendController;
 
   @override
   void initState() {
     super.initState();
     pairingController = PairingController(MdnsDiscoveryService());
-    pairingController.startDiscovery(); // ✅ REQUIRED
+    pairingController.startDiscovery();
   }
 
   @override
   void dispose() {
-    pairingController.stopDiscovery(); // ✅ REQUIRED
+    pairingController.stopDiscovery();
+    sendController?.dispose();
     super.dispose();
   }
 
-  void _showSendOptions(BuildContext context, PeerDevice peer) {
+  void _onDeviceSelected(PeerDevice device) {
+    sendController?.dispose();
+    sendController = SendController(device)..addListener(() => setState(() {}));
+    setState(() => selectedDevice = device);
+  }
+
+  void _showSendOptions(BuildContext context) {
     showModalBottomSheet(
       context: context,
       builder: (_) => SafeArea(
@@ -47,7 +55,7 @@ class _HomeScreenState extends State<HomeScreen> {
               title: const Text('Send from Files'),
               onTap: () {
                 Navigator.pop(context);
-                _sendFromFiles(peer);
+                _pickFiles();
               },
             ),
             ListTile(
@@ -55,7 +63,7 @@ class _HomeScreenState extends State<HomeScreen> {
               title: const Text('Send from Photos & Videos'),
               onTap: () {
                 Navigator.pop(context);
-                _sendFromPhotos(peer);
+                _pickMedia();
               },
             ),
           ],
@@ -64,45 +72,26 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  /// ✅ MULTI-SELECT FILES
-  Future<void> _sendFromFiles(PeerDevice peer) async {
+  Future<void> _pickFiles() async {
     final result = await FilePicker.platform.pickFiles(allowMultiple: true);
-    if (result == null) return;
+    if (result == null || sendController == null) return;
 
-    for (final file in result.files) {
-      if (file.path == null) continue;
+    final files = result.files
+        .where((f) => f.path != null)
+        .map((f) => File(f.path!))
+        .toList();
 
-      await sendController.sendFile(
-        filePath: file.path!,
-        ip: peer.ip,
-        port: peer.port,
-      );
-    }
-
-    if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('All files sent successfully')),
-    );
+    sendController!.addFiles(files);
   }
 
-  /// ✅ MULTI-SELECT PHOTOS + VIDEOS
-  Future<void> _sendFromPhotos(PeerDevice peer) async {
+  Future<void> _pickMedia() async {
+    if (sendController == null) return;
+
     final picker = ImagePicker();
     final media = await picker.pickMultipleMedia();
-    if (media.isEmpty) return;
 
-    for (final item in media) {
-      await sendController.sendFile(
-        filePath: item.path,
-        ip: peer.ip,
-        port: peer.port,
-      );
-    }
-
-    if (!mounted) return;
-    ScaffoldMessenger.of(
-      context,
-    ).showSnackBar(const SnackBar(content: Text('Media sent successfully')));
+    final files = media.map((m) => File(m.path)).toList();
+    sendController!.addFiles(files);
   }
 
   @override
@@ -114,7 +103,7 @@ class _HomeScreenState extends State<HomeScreen> {
         child: StreamBuilder<List<PeerDevice>>(
           stream: pairingController.peersStream,
           builder: (context, snapshot) {
-            final discoveredDevices = snapshot.data ?? [];
+            final devices = snapshot.data ?? [];
 
             return Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -133,26 +122,23 @@ class _HomeScreenState extends State<HomeScreen> {
 
                 const SizedBox(height: 24),
 
-                if (discoveredDevices.isEmpty)
-                  const Center(child: Text('Discovering devices...'))
-                else
-                  DropdownButtonFormField<PeerDevice>(
-                    value: selectedDevice,
-                    hint: const Text('Select device to send to'),
-                    isExpanded: true,
-                    items: discoveredDevices.map((device) {
-                      return DropdownMenuItem(
-                        value: device,
-                        child: Text('${device.name} • ${device.ip}'),
-                      );
-                    }).toList(),
-                    onChanged: (device) {
-                      setState(() => selectedDevice = device);
-                    },
-                    decoration: const InputDecoration(
-                      border: OutlineInputBorder(),
-                    ),
+                DropdownButtonFormField<PeerDevice>(
+                  value: selectedDevice,
+                  hint: const Text('Select device to send to'),
+                  isExpanded: true,
+                  items: devices.map((device) {
+                    return DropdownMenuItem(
+                      value: device,
+                      child: Text('${device.name} • ${device.ip}'),
+                    );
+                  }).toList(),
+                  onChanged: (device) {
+                    if (device != null) _onDeviceSelected(device);
+                  },
+                  decoration: const InputDecoration(
+                    border: OutlineInputBorder(),
                   ),
+                ),
 
                 const SizedBox(height: 24),
 
@@ -161,8 +147,34 @@ class _HomeScreenState extends State<HomeScreen> {
                   label: const Text('Pick & Send'),
                   onPressed: selectedDevice == null
                       ? null
-                      : () => _showSendOptions(context, selectedDevice!),
+                      : () => _showSendOptions(context),
                 ),
+
+                const SizedBox(height: 16),
+
+                if (sendController != null)
+                  Expanded(
+                    child: ListView(
+                      children: sendController!.active.map((task) {
+                        final name = task.file.path.split('/').last;
+                        return Padding(
+                          padding: const EdgeInsets.only(bottom: 12),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                name,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                              const SizedBox(height: 6),
+                              LinearProgressIndicator(value: task.progress),
+                            ],
+                          ),
+                        );
+                      }).toList(),
+                    ),
+                  ),
               ],
             );
           },

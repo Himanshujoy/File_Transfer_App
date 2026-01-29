@@ -1,23 +1,56 @@
+import 'dart:collection';
 import 'dart:io';
-import 'package:dio/dio.dart';
+import 'package:flutter/foundation.dart';
+import '../../core/models/peer_device.dart';
+import '../../core/network/transfer/file_transfer_client.dart';
 
-class SendController {
-  final Dio _dio = Dio();
+class SendTask {
+  final File file;
+  double progress = 0;
 
-  Future<void> sendFile({
-    required String filePath,
-    required String ip,
-    required int port,
-  }) async {
-    final file = File(filePath);
-    final filename = file.uri.pathSegments.last;
+  SendTask(this.file);
+}
 
-    final response = await _dio.post(
-      'http://$ip:$port/upload',
-      data: file.openRead(),
-      options: Options(headers: {'x-filename': filename}),
-    );
+class SendController extends ChangeNotifier {
+  final PeerDevice peer;
+  static const int maxConcurrent = 5;
 
-    print('Upload response: ${response.statusCode}');
+  final Queue<SendTask> _queue = Queue();
+  final List<SendTask> _active = [];
+
+  SendController(this.peer);
+
+  List<SendTask> get active => List.unmodifiable(_active);
+
+  void addFiles(List<File> files) {
+    for (final f in files) {
+      _queue.add(SendTask(f));
+    }
+    _pump();
+  }
+
+  void _pump() {
+    while (_active.length < maxConcurrent && _queue.isNotEmpty) {
+      final task = _queue.removeFirst();
+      _active.add(task);
+      _upload(task);
+    }
+    notifyListeners();
+  }
+
+  Future<void> _upload(SendTask task) async {
+    try {
+      await FileTransferClient.sendFile(
+        file: task.file,
+        peer: peer,
+        onProgress: (sent, total) {
+          task.progress = sent / total;
+          notifyListeners();
+        },
+      );
+    } finally {
+      _active.remove(task);
+      _pump();
+    }
   }
 }

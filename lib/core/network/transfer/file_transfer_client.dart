@@ -1,32 +1,29 @@
 import 'dart:io';
-import 'package:http/http.dart' as http;
+import 'package:dio/dio.dart';
 import '../../models/peer_device.dart';
 
+typedef ProgressCallback = void Function(int sent, int total);
+
 class FileTransferClient {
+  static final Dio _dio = Dio();
+
   static Future<void> sendFile({
     required File file,
     required PeerDevice peer,
+    required ProgressCallback onProgress,
   }) async {
-    // Resolve .local → IPv4
-    final addresses = await InternetAddress.lookup(peer.ip);
-    final ipv4 = addresses.firstWhere(
-      (a) => a.type == InternetAddressType.IPv4,
+    final filename = file.uri.pathSegments.last;
+
+    await _dio.post(
+      'http://${peer.ip}:${peer.port}/upload',
+      data: file.openRead(),
+      options: Options(
+        headers: {
+          'x-filename': filename,
+          Headers.contentLengthHeader: await file.length(),
+        },
+      ),
+      onSendProgress: onProgress,
     );
-
-    final uri = Uri.parse('http://${ipv4.address}:${peer.port}/upload');
-
-    print('📤 Sending file to $uri');
-
-    final request = http.Request('POST', uri)
-      ..headers['x-filename'] = file.uri.pathSegments.last
-      ..bodyBytes = await file.readAsBytes();
-
-    final response = await request.send();
-
-    if (response.statusCode != 200) {
-      throw Exception('Upload failed (${response.statusCode})');
-    }
-
-    print('✅ File sent successfully');
   }
 }

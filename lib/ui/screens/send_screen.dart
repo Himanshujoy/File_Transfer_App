@@ -5,128 +5,89 @@ import 'package:image_picker/image_picker.dart';
 
 import '../../core/models/peer_device.dart';
 import '../../core/network/discovery/discovery_service.dart';
-import '../../core/network/transfer/file_transfer_client.dart';
+import '../../features/send/send_controller.dart';
 
-class SendScreen extends StatelessWidget {
+class SendScreen extends StatefulWidget {
   final DiscoveryService discoveryService;
-
   const SendScreen({super.key, required this.discoveryService});
+
+  @override
+  State<SendScreen> createState() => _SendScreenState();
+}
+
+class _SendScreenState extends State<SendScreen> {
+  SendController? controller;
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(title: const Text('Send File')),
       body: StreamBuilder<List<PeerDevice>>(
-        stream: discoveryService.discoverPeers(),
+        stream: widget.discoveryService.discoverPeers(),
         builder: (context, snapshot) {
           final peers = snapshot.data ?? [];
-
           if (peers.isEmpty) {
-            return const Center(
-              child: Text(
-                'No devices found\nMake sure both devices are on the same Wi-Fi',
-                textAlign: TextAlign.center,
-              ),
-            );
+            return const Center(child: Text('No devices found'));
           }
 
-          return ListView.builder(
-            itemCount: peers.length,
-            itemBuilder: (context, index) {
-              final peer = peers[index];
+          final peer = peers.first; // pick first device
 
-              return ListTile(
-                leading: const Icon(Icons.devices),
-                title: Text(peer.name),
-                subtitle: Text('${peer.ip}:${peer.port}'),
-                trailing: const Icon(Icons.send),
-                onTap: () => _showSendOptions(context, peer),
-              );
-            },
+          controller ??= SendController(peer)
+            ..addListener(() => setState(() {}));
+
+          return Column(
+            children: [
+              ElevatedButton(
+                onPressed: () => _pick(peer),
+                child: const Text('Pick & Send'),
+              ),
+
+              const SizedBox(height: 12),
+
+              Expanded(
+                child: ListView(
+                  children: controller!.active.map(_buildProgressTile).toList(),
+                ),
+              ),
+            ],
           );
         },
       ),
     );
   }
 
-  void _showSendOptions(BuildContext context, PeerDevice peer) {
-    showModalBottomSheet(
-      context: context,
-      builder: (_) => SafeArea(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            ListTile(
-              leading: const Icon(Icons.folder),
-              title: const Text('Send from Files'),
-              onTap: () {
-                Navigator.pop(context);
-                _sendFromFiles(context, peer);
-              },
-            ),
-            ListTile(
-              leading: const Icon(Icons.photo_library),
-              title: const Text('Send from Photos & Videos'),
-              onTap: () {
-                Navigator.pop(context);
-                _sendFromPhotos(context, peer);
-              },
-            ),
-          ],
-        ),
-      ),
+  Widget _buildProgressTile(SendTask task) {
+    final name = task.file.path.split('/').last;
+
+    return ListTile(
+      leading: _thumbnail(task.file),
+      title: Text(name, maxLines: 1, overflow: TextOverflow.ellipsis),
+      subtitle: LinearProgressIndicator(value: task.progress),
     );
   }
 
-  /// ✅ MULTI-SELECT FILES
-  Future<void> _sendFromFiles(BuildContext context, PeerDevice peer) async {
-    try {
-      final result = await FilePicker.platform.pickFiles(allowMultiple: true);
-      if (result == null) return;
-
-      for (final picked in result.files) {
-        if (picked.path == null) continue;
-        await _sendFile(context, peer, File(picked.path!));
-      }
-    } catch (e) {
-      _showError(context, e);
+  Widget _thumbnail(File file) {
+    final ext = file.path.split('.').last.toLowerCase();
+    if (['jpg', 'jpeg', 'png'].contains(ext)) {
+      return Image.file(file, width: 48, height: 48, fit: BoxFit.cover);
     }
+    return const Icon(Icons.insert_drive_file);
   }
 
-  /// ✅ MULTI-SELECT PHOTOS + VIDEOS (iOS & Android)
-  Future<void> _sendFromPhotos(BuildContext context, PeerDevice peer) async {
-    try {
-      final picker = ImagePicker();
-      final List<XFile> media = await picker.pickMultipleMedia();
-      if (media.isEmpty) return;
+  Future<void> _pick(PeerDevice peer) async {
+    final files = <File>[];
 
-      for (final item in media) {
-        await _sendFile(context, peer, File(item.path));
-      }
-    } catch (e) {
-      _showError(context, e);
+    final picked = await FilePicker.platform.pickFiles(allowMultiple: true);
+    if (picked != null) {
+      files.addAll(
+        picked.files.where((f) => f.path != null).map((f) => File(f.path!)),
+      );
     }
-  }
 
-  Future<void> _sendFile(
-    BuildContext context,
-    PeerDevice peer,
-    File file,
-  ) async {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('Sending ${file.path.split('/').last}')),
-    );
+    final picker = ImagePicker();
+    final media = await picker.pickMultipleMedia();
+    files.addAll(media.map((m) => File(m.path)));
 
-    await FileTransferClient.sendFile(file: file, peer: peer);
-
-    ScaffoldMessenger.of(
-      context,
-    ).showSnackBar(const SnackBar(content: Text('File sent successfully')));
-  }
-
-  void _showError(BuildContext context, Object e) {
-    ScaffoldMessenger.of(
-      context,
-    ).showSnackBar(SnackBar(content: Text('Failed to send file: $e')));
+    controller!.addFiles(files);
   }
 }
