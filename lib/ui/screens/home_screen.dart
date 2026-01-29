@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:file_picker/file_picker.dart';
+import 'package:image_picker/image_picker.dart';
 
 import '../../features/receive/receive_controller.dart';
 import '../../features/send/send_controller.dart';
@@ -32,6 +33,82 @@ class _HomeScreenState extends State<HomeScreen> {
   void dispose() {
     pairingController.stopDiscovery(); // ✅ REQUIRED
     super.dispose();
+  }
+
+  void _showSendOptions(BuildContext context, PeerDevice peer) {
+    showModalBottomSheet(
+      context: context,
+      builder: (_) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ListTile(
+              leading: const Icon(Icons.folder),
+              title: const Text('Send from Files'),
+              onTap: () {
+                Navigator.pop(context);
+                _sendFromFiles(context, peer);
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.photo),
+              title: const Text('Send from Photos'),
+              onTap: () {
+                Navigator.pop(context);
+                _sendFromPhotos(context, peer);
+              },
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _sendFromFiles(BuildContext context, PeerDevice peer) async {
+    try {
+      final result = await FilePicker.platform.pickFiles();
+      if (result == null || result.files.single.path == null) return;
+
+      await sendController.sendFile(
+        filePath: result.files.single.path!,
+        ip: peer.ip,
+        port: peer.port,
+      );
+
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('File sent successfully')));
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Error: $e')));
+    }
+  }
+
+  Future<void> _sendFromPhotos(BuildContext context, PeerDevice peer) async {
+    try {
+      final picker = ImagePicker();
+      final image = await picker.pickImage(source: ImageSource.gallery);
+      if (image == null) return;
+
+      await sendController.sendFile(
+        filePath: image.path,
+        ip: peer.ip,
+        port: peer.port,
+      );
+
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Image sent successfully')));
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Error: $e')));
+    }
   }
 
   @override
@@ -90,31 +167,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   label: const Text('Pick & Send File'),
                   onPressed: selectedDevice == null
                       ? null
-                      : () async {
-                          final result = await FilePicker.platform.pickFiles();
-                          if (result == null) return;
-
-                          final filePath = result.files.single.path!;
-                          try {
-                            await sendController.sendFile(
-                              filePath: filePath,
-                              ip: selectedDevice!.ip,
-                              port: selectedDevice!.port,
-                            );
-
-                            if (!mounted) return;
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(
-                                content: Text('File sent successfully'),
-                              ),
-                            );
-                          } catch (e) {
-                            if (!mounted) return;
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              SnackBar(content: Text('Error: $e')),
-                            );
-                          }
-                        },
+                      : () => _showSendOptions(context, selectedDevice!),
                 ),
               ],
             );
