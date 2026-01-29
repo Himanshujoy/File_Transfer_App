@@ -152,7 +152,14 @@ class _HomeScreenState extends State<HomeScreen> {
 
                 const SizedBox(height: 16),
 
-                if (sendController != null)
+                if (sendController != null) ...[
+                  Text(
+                    'Completed ${sendController!.doneCount} '
+                    'of ${sendController!.totalCount}',
+                    textAlign: TextAlign.center,
+                  ),
+                  const SizedBox(height: 12),
+
                   Expanded(
                     child: ListView(
                       children: sendController!.active.map((task) {
@@ -175,6 +182,7 @@ class _HomeScreenState extends State<HomeScreen> {
                       }).toList(),
                     ),
                   ),
+                ],
               ],
             );
           },

@@ -10,7 +10,9 @@ class FileTransferService {
   HttpServer? _server;
   int? _port;
 
-  /// Start HTTP file-receiving server
+  /// Pure Dart callback (NO Flutter dependency)
+  void Function()? onFileReceived;
+
   Future<void> startServer({int port = 8080}) async {
     if (_server != null) return;
 
@@ -22,27 +24,22 @@ class FileTransferService {
     print('🌐 HTTP Server running on port $port');
   }
 
-  /// Stop server
   Future<void> stopServer() async {
     if (_server == null) return;
 
     await _server!.close(force: true);
     _server = null;
     _port = null;
-
     print('🛑 HTTP Server stopped');
   }
 
-  /// Router
   Future<Response> _router(Request request) async {
     if (request.method == 'POST' && request.url.path == 'upload') {
       return _handleUpload(request);
     }
-
     return Response.notFound('Not Found');
   }
 
-  /// Handle incoming file upload
   Future<Response> _handleUpload(Request request) async {
     IOSink? sink;
 
@@ -55,10 +52,8 @@ class FileTransferService {
       late final Directory saveDir;
 
       if (Platform.isAndroid) {
-        // ✅ PUBLIC Downloads folder (user-visible)
         saveDir = Directory('/storage/emulated/0/Download/fileTransfersApp');
       } else {
-        // ✅ iOS (unchanged)
         saveDir = await getApplicationDocumentsDirectory();
       }
 
@@ -69,7 +64,6 @@ class FileTransferService {
       final file = File('${saveDir.path}/$filename');
       sink = file.openWrite();
 
-      // ✅ iOS-safe streaming (CRITICAL FIX)
       await for (final chunk in request.read()) {
         sink.add(chunk);
       }
@@ -79,20 +73,18 @@ class FileTransferService {
 
       print('📥 File received: ${file.path}');
 
+      /// 🔔 notify receiver UI
+      onFileReceived?.call();
+
       return Response.ok(
-        jsonEncode({'status': 'success', 'path': file.path}),
+        jsonEncode({'status': 'success'}),
         headers: {'Content-Type': 'application/json'},
       );
     } catch (e, stack) {
       print('❌ Upload failed: $e');
       print(stack);
-
       await sink?.close();
-
-      return Response.internalServerError(
-        body: jsonEncode({'status': 'error', 'message': e.toString()}),
-        headers: {'Content-Type': 'application/json'},
-      );
+      return Response.internalServerError(body: e.toString());
     }
   }
 

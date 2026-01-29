@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import '../../core/network/transfer/file_transfer_service.dart';
+import '../../features/receive/receive_controller.dart';
 
 class ReceiveScreen extends StatefulWidget {
   const ReceiveScreen({super.key});
@@ -9,45 +9,54 @@ class ReceiveScreen extends StatefulWidget {
 }
 
 class _ReceiveScreenState extends State<ReceiveScreen> {
-  final _service = FileTransferService();
+  final ReceiveController controller = ReceiveController();
 
   @override
   void initState() {
     super.initState();
-    _service.startServer();
+    controller.startReceiving();
   }
 
   @override
   void dispose() {
-    _service.stopServer();
+    controller.stopReceiving();
+    controller.dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(title: const Text('Receive File')),
-      body: Padding(
-        padding: const EdgeInsets.all(24),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: const [
-            Icon(Icons.wifi_tethering, size: 80),
-            SizedBox(height: 24),
-            Text(
-              'Ready to receive files',
-              style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+    return AnimatedBuilder(
+      animation: controller,
+      builder: (_, __) {
+        return Scaffold(
+          appBar: AppBar(title: const Text('Receive File')),
+          body: Padding(
+            padding: const EdgeInsets.all(24),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                const Icon(Icons.wifi_tethering, size: 80),
+                const SizedBox(height: 24),
+                Text(
+                  'Received ${controller.receivedCount} files',
+                  style: const TextStyle(
+                    fontSize: 20,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                const SizedBox(height: 12),
+                const Text(
+                  'Keep this screen open.\nFiles will be saved automatically.',
+                  textAlign: TextAlign.center,
+                ),
+                const SizedBox(height: 32),
+                const CircularProgressIndicator(),
+              ],
             ),
-            SizedBox(height: 12),
-            Text(
-              'Keep this screen open.\nFiles will be saved automatically.',
-              textAlign: TextAlign.center,
-            ),
-            SizedBox(height: 32),
-            CircularProgressIndicator(),
-          ],
-        ),
-      ),
+          ),
+        );
+      },
     );
   }
 }

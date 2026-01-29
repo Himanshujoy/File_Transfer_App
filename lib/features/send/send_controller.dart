@@ -18,9 +18,15 @@ class SendController extends ChangeNotifier {
   final Queue<SendTask> _queue = Queue();
   final List<SendTask> _active = [];
 
+  int completedCount = 0;
+
   SendController(this.peer);
 
   List<SendTask> get active => List.unmodifiable(_active);
+
+  int get totalCount => _queue.length + _active.length + completedCount;
+
+  int get doneCount => completedCount;
 
   void addFiles(List<File> files) {
     for (final f in files) {
@@ -44,10 +50,11 @@ class SendController extends ChangeNotifier {
         file: task.file,
         peer: peer,
         onProgress: (sent, total) {
-          task.progress = sent / total;
+          task.progress = total == 0 ? 0 : sent / total;
           notifyListeners();
         },
       );
+      completedCount++;
     } finally {
       _active.remove(task);
       _pump();
