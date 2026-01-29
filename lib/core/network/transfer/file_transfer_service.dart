@@ -16,11 +16,7 @@ class FileTransferService {
 
     final handler = Pipeline().addMiddleware(logRequests()).addHandler(_router);
 
-    _server = await shelf_io.serve(
-      handler,
-      InternetAddress.anyIPv4, // ✅ REQUIRED
-      port,
-    );
+    _server = await shelf_io.serve(handler, InternetAddress.anyIPv4, port);
 
     _port = port;
     print('🌐 HTTP Server running on port $port');
@@ -46,20 +42,31 @@ class FileTransferService {
     return Response.notFound('Not Found');
   }
 
-  /// Handle incoming file upload (FIXED FOR iOS)
+  /// Handle incoming file upload
   Future<Response> _handleUpload(Request request) async {
     IOSink? sink;
 
     try {
       final filename = request.headers['x-filename'];
-
       if (filename == null || filename.isEmpty) {
         return Response.badRequest(body: 'Missing filename');
       }
 
-      final dir = await getApplicationDocumentsDirectory();
-      final file = File('${dir.path}/$filename');
+      late final Directory saveDir;
 
+      if (Platform.isAndroid) {
+        // ✅ PUBLIC Downloads folder (user-visible)
+        saveDir = Directory('/storage/emulated/0/Download/fileTransfersApp');
+      } else {
+        // ✅ iOS (unchanged)
+        saveDir = await getApplicationDocumentsDirectory();
+      }
+
+      if (!await saveDir.exists()) {
+        await saveDir.create(recursive: true);
+      }
+
+      final file = File('${saveDir.path}/$filename');
       sink = file.openWrite();
 
       // ✅ iOS-safe streaming (CRITICAL FIX)
@@ -89,6 +96,5 @@ class FileTransferService {
     }
   }
 
-  /// Expose port (used by mDNS)
   int? get port => _port;
 }
