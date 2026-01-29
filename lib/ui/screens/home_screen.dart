@@ -23,7 +23,7 @@ class _HomeScreenState extends State<HomeScreen> {
   PeerDevice? selectedDevice;
   SendController? sendController;
 
-  bool _receivingStarted = false; // ✅ NEW
+  bool _receivingStarted = false;
 
   @override
   void initState() {
@@ -43,9 +43,17 @@ class _HomeScreenState extends State<HomeScreen> {
     super.dispose();
   }
 
-  void _startReceiving() async {
-    await receiveController.startReceiving();
-    setState(() => _receivingStarted = true);
+  /// 🔁 TOGGLE RECEIVING
+  Future<void> _toggleReceiving() async {
+    if (_receivingStarted) {
+      await receiveController.stopReceiving();
+    } else {
+      await receiveController.startReceiving();
+    }
+
+    setState(() {
+      _receivingStarted = !_receivingStarted;
+    });
   }
 
   void _onDeviceSelected(PeerDevice device) {
@@ -119,18 +127,20 @@ class _HomeScreenState extends State<HomeScreen> {
             return Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                /// ✅ RECEIVING BUTTON (CLICKABLE)
+                /// 🔘 START / STOP RECEIVING BUTTON
                 ElevatedButton.icon(
-                  icon: const Icon(Icons.download),
-                  label: Text(
-                    _receivingStarted ? 'Receiving Enabled' : 'Start Receiving',
+                  icon: Icon(
+                    _receivingStarted ? Icons.stop_circle : Icons.download,
                   ),
-                  onPressed: _receivingStarted ? null : _startReceiving,
+                  label: Text(
+                    _receivingStarted ? 'Stop Receiving' : 'Start Receiving',
+                  ),
+                  onPressed: _toggleReceiving,
                 ),
 
                 const SizedBox(height: 12),
 
-                /// ✅ RECEIVER COUNTER (ONLY AFTER START)
+                /// 📥 RECEIVER COUNTER (VISIBLE ONLY WHILE RECEIVING)
                 if (_receivingStarted)
                   Text(
                     'Received: ${receiveController.receivedCount}',
