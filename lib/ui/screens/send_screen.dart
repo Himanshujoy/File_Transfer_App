@@ -65,8 +65,8 @@ class SendScreen extends StatelessWidget {
               },
             ),
             ListTile(
-              leading: const Icon(Icons.photo),
-              title: const Text('Send from Photos'),
+              leading: const Icon(Icons.photo_library),
+              title: const Text('Send from Photos & Videos'),
               onTap: () {
                 Navigator.pop(context);
                 _sendFromPhotos(context, peer);
@@ -78,26 +78,31 @@ class SendScreen extends StatelessWidget {
     );
   }
 
+  /// ✅ MULTI-SELECT FILES
   Future<void> _sendFromFiles(BuildContext context, PeerDevice peer) async {
     try {
-      final result = await FilePicker.platform.pickFiles();
-      if (result == null || result.files.single.path == null) return;
+      final result = await FilePicker.platform.pickFiles(allowMultiple: true);
+      if (result == null) return;
 
-      final file = File(result.files.single.path!);
-      await _sendFile(context, peer, file);
+      for (final picked in result.files) {
+        if (picked.path == null) continue;
+        await _sendFile(context, peer, File(picked.path!));
+      }
     } catch (e) {
       _showError(context, e);
     }
   }
 
+  /// ✅ MULTI-SELECT PHOTOS + VIDEOS (iOS & Android)
   Future<void> _sendFromPhotos(BuildContext context, PeerDevice peer) async {
     try {
       final picker = ImagePicker();
-      final image = await picker.pickImage(source: ImageSource.gallery);
-      if (image == null) return;
+      final List<XFile> media = await picker.pickMultipleMedia();
+      if (media.isEmpty) return;
 
-      final file = File(image.path);
-      await _sendFile(context, peer, file);
+      for (final item in media) {
+        await _sendFile(context, peer, File(item.path));
+      }
     } catch (e) {
       _showError(context, e);
     }
@@ -108,9 +113,9 @@ class SendScreen extends StatelessWidget {
     PeerDevice peer,
     File file,
   ) async {
-    ScaffoldMessenger.of(
-      context,
-    ).showSnackBar(const SnackBar(content: Text('Sending file...')));
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('Sending ${file.path.split('/').last}')),
+    );
 
     await FileTransferClient.sendFile(file: file, peer: peer);
 

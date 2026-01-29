@@ -47,15 +47,15 @@ class _HomeScreenState extends State<HomeScreen> {
               title: const Text('Send from Files'),
               onTap: () {
                 Navigator.pop(context);
-                _sendFromFiles(context, peer);
+                _sendFromFiles(peer);
               },
             ),
             ListTile(
-              leading: const Icon(Icons.photo),
+              leading: const Icon(Icons.photo_library),
               title: const Text('Send from Photos & Videos'),
               onTap: () {
                 Navigator.pop(context);
-                _sendFromPhotos(context, peer);
+                _sendFromPhotos(peer);
               },
             ),
           ],
@@ -64,60 +64,45 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  Future<void> _sendFromFiles(BuildContext context, PeerDevice peer) async {
-    try {
-      final result = await FilePicker.platform.pickFiles();
-      if (result == null || result.files.single.path == null) return;
+  /// ✅ MULTI-SELECT FILES
+  Future<void> _sendFromFiles(PeerDevice peer) async {
+    final result = await FilePicker.platform.pickFiles(allowMultiple: true);
+    if (result == null) return;
+
+    for (final file in result.files) {
+      if (file.path == null) continue;
 
       await sendController.sendFile(
-        filePath: result.files.single.path!,
+        filePath: file.path!,
         ip: peer.ip,
         port: peer.port,
       );
-
-      if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('File sent successfully')));
-    } catch (e) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('Error: $e')));
     }
+
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('All files sent successfully')),
+    );
   }
 
-  Future<void> _sendFromPhotos(BuildContext context, PeerDevice peer) async {
-    try {
-      final picker = ImagePicker();
+  /// ✅ MULTI-SELECT PHOTOS + VIDEOS
+  Future<void> _sendFromPhotos(PeerDevice peer) async {
+    final picker = ImagePicker();
+    final media = await picker.pickMultipleMedia();
+    if (media.isEmpty) return;
 
-      // Let user choose image OR video
-      final XFile? media = await picker.pickMedia();
-
-      if (media == null) return;
-
+    for (final item in media) {
       await sendController.sendFile(
-        filePath: media.path,
+        filePath: item.path,
         ip: peer.ip,
         port: peer.port,
       );
-
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            media.mimeType?.startsWith('video') == true
-                ? 'Video sent successfully'
-                : 'Photo sent successfully',
-          ),
-        ),
-      );
-    } catch (e) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('Error: $e')));
     }
+
+    if (!mounted) return;
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(const SnackBar(content: Text('Media sent successfully')));
   }
 
   @override
@@ -156,7 +141,7 @@ class _HomeScreenState extends State<HomeScreen> {
                     hint: const Text('Select device to send to'),
                     isExpanded: true,
                     items: discoveredDevices.map((device) {
-                      return DropdownMenuItem<PeerDevice>(
+                      return DropdownMenuItem(
                         value: device,
                         child: Text('${device.name} • ${device.ip}'),
                       );
@@ -173,7 +158,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
                 ElevatedButton.icon(
                   icon: const Icon(Icons.upload),
-                  label: const Text('Pick & Send File'),
+                  label: const Text('Pick & Send'),
                   onPressed: selectedDevice == null
                       ? null
                       : () => _showSendOptions(context, selectedDevice!),
