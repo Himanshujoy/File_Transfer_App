@@ -54,32 +54,25 @@ class _SendScreenState extends State<SendScreen> {
   }
 
   Future<void> _onSendTapped(BuildContext context, PeerDevice peer) async {
-    if (peer.ip.isEmpty) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('Invalid peer IP')));
-      return;
-    }
-
     try {
       final result = await FilePicker.platform.pickFiles();
       if (result == null || result.files.single.path == null) return;
 
       final file = File(result.files.single.path!);
 
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('Sending file...')));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Sending ${file.path.split('/').last}...')),
+      );
 
       await FileTransferClient.sendFile(file: file, peer: peer);
 
       ScaffoldMessenger.of(
         context,
-      ).showSnackBar(const SnackBar(content: Text('File sent successfully')));
+      ).showSnackBar(const SnackBar(content: Text('✅ File sent successfully')));
     } catch (e) {
       ScaffoldMessenger.of(
         context,
-      ).showSnackBar(SnackBar(content: Text('Failed to send file: $e')));
+      ).showSnackBar(SnackBar(content: Text('❌ Failed to send file: $e')));
     }
   }
 }

@@ -10,8 +10,7 @@ import 'discovery_service.dart';
 class MdnsDiscoveryService implements DiscoveryService {
   static const String serviceType = '_filetransfer._tcp';
 
-  final String _serviceName =
-      'FlutterFileTransfer-${Platform.localHostname}-${DateTime.now().millisecondsSinceEpoch}';
+  late final String _serviceName;
 
   final StreamController<List<PeerDevice>> _peerController =
       StreamController<List<PeerDevice>>.broadcast();
@@ -21,9 +20,6 @@ class MdnsDiscoveryService implements DiscoveryService {
   BonsoirDiscovery? _discovery;
   BonsoirBroadcast? _broadcast;
 
-  /// All IPv4 addresses of this device (important on iOS)
-  late final Set<String> _selfIps;
-
   bool _started = false;
 
   @override
@@ -31,7 +27,8 @@ class MdnsDiscoveryService implements DiscoveryService {
     if (_started) return;
     _started = true;
 
-    await _initSelfIps();
+    _serviceName =
+        'FlutterFileTransfer-${Platform.localHostname}-${DateTime.now().millisecondsSinceEpoch}';
 
     /// ---------------------------
     /// 🔊 BROADCAST
@@ -55,25 +52,11 @@ class MdnsDiscoveryService implements DiscoveryService {
     await _discovery!.initialize();
     await _discovery!.start();
 
-    /// 🔥 Required so iOS UI updates immediately
     _peerController.add([]);
 
     _discovery!.eventStream!.listen(_handleDiscoveryEvent);
-  }
 
-  /// Collect ALL local IPv4 addresses (Wi-Fi, hotspot, etc.)
-  Future<void> _initSelfIps() async {
-    final interfaces = await NetworkInterface.list(
-      includeLoopback: false,
-      type: InternetAddressType.IPv4,
-    );
-
-    _selfIps = interfaces
-        .expand((i) => i.addresses)
-        .map((a) => a.address)
-        .toSet();
-
-    print('📍 Self IPs: $_selfIps');
+    print('🟢 startDiscovery called ($_serviceName)');
   }
 
   Future<void> _handleDiscoveryEvent(BonsoirDiscoveryEvent event) async {
@@ -89,33 +72,22 @@ class MdnsDiscoveryService implements DiscoveryService {
 
       if (service.host == null || service.port == null) return;
 
-      // ❌ Ignore localhost / loopback
-      if (service.host == 'localhost' || service.host!.startsWith('127.')) {
+      /// ✅ ONLY safe self-filter (CRITICAL FIX)
+      if (service.name == _serviceName) {
+        print('🚫 Ignored self service: ${service.name}');
         return;
       }
 
-      // Resolve .local → IPv4
+      /// Resolve .local → IPv4
       final ip = await NetworkUtils.resolveHostToIp(service.host!);
       if (ip == null) return;
 
-      // ❌ Ignore IPv6
+      /// Ignore IPv6 (HTTP server is IPv4)
       if (ip.contains(':')) return;
-
-      // ❌ Ignore loopback addresses (CRITICAL iOS FIX)
-      if (ip == '127.0.0.1' || ip.startsWith('127.')) {
-        print('🚫 Ignored loopback IP: $ip');
-        return;
-      }
-
-      // ❌ Ignore self (all local interfaces)
-      if (_selfIps.contains(ip)) {
-        print('🚫 Ignored self IP: $ip');
-        return;
-      }
 
       final id = '$ip:${service.port}';
 
-      // Deduplicate by IP:PORT
+      /// Deduplicate
       if (_devices.containsKey(id)) return;
 
       final device = PeerDevice(

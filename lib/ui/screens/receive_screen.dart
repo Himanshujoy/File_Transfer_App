@@ -1,7 +1,27 @@
 import 'package:flutter/material.dart';
+import '../../core/network/transfer/file_transfer_service.dart';
 
-class ReceiveScreen extends StatelessWidget {
+class ReceiveScreen extends StatefulWidget {
   const ReceiveScreen({super.key});
+
+  @override
+  State<ReceiveScreen> createState() => _ReceiveScreenState();
+}
+
+class _ReceiveScreenState extends State<ReceiveScreen> {
+  final _service = FileTransferService();
+
+  @override
+  void initState() {
+    super.initState();
+    _service.startServer();
+  }
+
+  @override
+  void dispose() {
+    _service.stopServer();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -20,7 +40,7 @@ class ReceiveScreen extends StatelessWidget {
             ),
             SizedBox(height: 12),
             Text(
-              'Keep this screen open.\nOther devices on the same Wi-Fi can send files to you.',
+              'Keep this screen open.\nFiles will be saved automatically.',
               textAlign: TextAlign.center,
             ),
             SizedBox(height: 32),
