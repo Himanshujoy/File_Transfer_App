@@ -101,8 +101,17 @@ class MdnsDiscoveryService implements DiscoveryService {
       // ❌ Ignore IPv6
       if (ip.contains(':')) return;
 
-      // ❌ Ignore self (CRITICAL iOS FIX)
-      if (_selfIps.contains(ip)) return;
+      // ❌ Ignore loopback addresses (CRITICAL iOS FIX)
+      if (ip == '127.0.0.1' || ip.startsWith('127.')) {
+        print('🚫 Ignored loopback IP: $ip');
+        return;
+      }
+
+      // ❌ Ignore self (all local interfaces)
+      if (_selfIps.contains(ip)) {
+        print('🚫 Ignored self IP: $ip');
+        return;
+      }
 
       final id = '$ip:${service.port}';
 
