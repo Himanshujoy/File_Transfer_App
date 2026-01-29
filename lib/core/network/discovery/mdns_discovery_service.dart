@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:bonsoir/bonsoir.dart';
+
 import '../../models/peer_device.dart';
 import '../../utils/network_utils.dart';
 import 'discovery_service.dart';
@@ -19,7 +20,9 @@ class MdnsDiscoveryService implements DiscoveryService {
 
   BonsoirDiscovery? _discovery;
   BonsoirBroadcast? _broadcast;
-  String? _localIp;
+
+  /// All IPv4 addresses of this device (important on iOS)
+  late final Set<String> _selfIps;
 
   bool _started = false;
 
@@ -28,7 +31,7 @@ class MdnsDiscoveryService implements DiscoveryService {
     if (_started) return;
     _started = true;
 
-    _localIp = await NetworkUtils.getLocalIp();
+    await _initSelfIps();
 
     /// ---------------------------
     /// 🔊 BROADCAST
@@ -52,57 +55,80 @@ class MdnsDiscoveryService implements DiscoveryService {
     await _discovery!.initialize();
     await _discovery!.start();
 
-    /// 🔥 EMIT EMPTY LIST (CRITICAL FOR iOS UI)
+    /// 🔥 Required so iOS UI updates immediately
     _peerController.add([]);
 
-    _discovery!.eventStream!.listen((event) async {
-      // Service found → resolve
-      if (event is BonsoirDiscoveryServiceFoundEvent) {
-        await event.service.resolve(_discovery!.serviceResolver);
+    _discovery!.eventStream!.listen(_handleDiscoveryEvent);
+  }
+
+  /// Collect ALL local IPv4 addresses (Wi-Fi, hotspot, etc.)
+  Future<void> _initSelfIps() async {
+    final interfaces = await NetworkInterface.list(
+      includeLoopback: false,
+      type: InternetAddressType.IPv4,
+    );
+
+    _selfIps = interfaces
+        .expand((i) => i.addresses)
+        .map((a) => a.address)
+        .toSet();
+
+    print('📍 Self IPs: $_selfIps');
+  }
+
+  Future<void> _handleDiscoveryEvent(BonsoirDiscoveryEvent event) async {
+    /// Service found → resolve
+    if (event is BonsoirDiscoveryServiceFoundEvent) {
+      await event.service.resolve(_discovery!.serviceResolver);
+      return;
+    }
+
+    /// Service resolved
+    if (event is BonsoirDiscoveryServiceResolvedEvent) {
+      final service = event.service;
+
+      if (service.host == null || service.port == null) return;
+
+      // ❌ Ignore localhost / loopback
+      if (service.host == 'localhost' || service.host!.startsWith('127.')) {
         return;
       }
 
-      // Service resolved
-      if (event is BonsoirDiscoveryServiceResolvedEvent) {
-        final service = event.service;
+      // Resolve .local → IPv4
+      final ip = await NetworkUtils.resolveHostToIp(service.host!);
+      if (ip == null) return;
 
-        if (service.host == null || service.port == null) return;
+      // ❌ Ignore IPv6
+      if (ip.contains(':')) return;
 
-        final ip = await NetworkUtils.resolveHostToIp(service.host!);
-        if (ip == null) return;
+      // ❌ Ignore self (CRITICAL iOS FIX)
+      if (_selfIps.contains(ip)) return;
 
-        // Ignore IPv6
-        if (ip.contains(':')) return;
+      final id = '$ip:${service.port}';
 
-        // ❌ Ignore self by IP (CRITICAL FIX FOR iOS)
-        if (_localIp != null && ip == _localIp) return;
+      // Deduplicate by IP:PORT
+      if (_devices.containsKey(id)) return;
 
-        final id = '$ip:${service.port}';
+      final device = PeerDevice(
+        id: id,
+        name: service.attributes?['name'] ?? service.name,
+        host: service.host!,
+        ip: ip,
+        port: service.port!,
+      );
 
-        // Deduplicate by IP:PORT (NOT name)
-        if (_devices.containsKey(id)) return;
+      _devices[id] = device;
+      _peerController.add(_devices.values.toList());
 
-        final device = PeerDevice(
-          id: id,
-          name: service.attributes?['name'] ?? service.name,
-          host: service.host!,
-          ip: ip,
-          port: service.port!,
-        );
+      print('📡 Found device: ${device.name} @ $ip:${service.port}');
+    }
 
-        _devices[id] = device;
-        _peerController.add(_devices.values.toList());
-
-        print('📡 Found device: ${device.name} @ $ip:${service.port}');
-      }
-
-      // Service lost
-      if (event is BonsoirDiscoveryServiceLostEvent) {
-        _devices.removeWhere((_, d) => d.name == event.service.name);
-        _peerController.add(_devices.values.toList());
-        print('📴 Lost device: ${event.service.name}');
-      }
-    });
+    /// Service lost
+    if (event is BonsoirDiscoveryServiceLostEvent) {
+      _devices.removeWhere((_, d) => d.name == event.service.name);
+      _peerController.add(_devices.values.toList());
+      print('📴 Lost device: ${event.service.name}');
+    }
   }
 
   @override
