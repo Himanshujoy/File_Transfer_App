@@ -17,24 +17,35 @@ class HomeScreen extends StatefulWidget {
 }
 
 class _HomeScreenState extends State<HomeScreen> {
-  final receiveController = ReceiveController();
-
+  late final ReceiveController receiveController;
   late final PairingController pairingController;
+
   PeerDevice? selectedDevice;
   SendController? sendController;
+
+  bool _receivingStarted = false; // ✅ NEW
 
   @override
   void initState() {
     super.initState();
+
     pairingController = PairingController(MdnsDiscoveryService());
     pairingController.startDiscovery();
+
+    receiveController = ReceiveController()..addListener(() => setState(() {}));
   }
 
   @override
   void dispose() {
     pairingController.stopDiscovery();
     sendController?.dispose();
+    receiveController.dispose();
     super.dispose();
+  }
+
+  void _startReceiving() async {
+    await receiveController.startReceiving();
+    setState(() => _receivingStarted = true);
   }
 
   void _onDeviceSelected(PeerDevice device) {
@@ -108,17 +119,24 @@ class _HomeScreenState extends State<HomeScreen> {
             return Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
+                /// ✅ RECEIVING BUTTON (CLICKABLE)
                 ElevatedButton.icon(
                   icon: const Icon(Icons.download),
-                  label: const Text('Start Receiving'),
-                  onPressed: () async {
-                    await receiveController.startReceiving();
-                    if (!mounted) return;
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text('Receiving enabled')),
-                    );
-                  },
+                  label: Text(
+                    _receivingStarted ? 'Receiving Enabled' : 'Start Receiving',
+                  ),
+                  onPressed: _receivingStarted ? null : _startReceiving,
                 ),
+
+                const SizedBox(height: 12),
+
+                /// ✅ RECEIVER COUNTER (ONLY AFTER START)
+                if (_receivingStarted)
+                  Text(
+                    'Received: ${receiveController.receivedCount}',
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(fontWeight: FontWeight.bold),
+                  ),
 
                 const SizedBox(height: 24),
 

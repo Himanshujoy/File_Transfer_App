@@ -4,13 +4,15 @@ import '../../core/network/transfer/file_transfer_service.dart';
 class ReceiveController extends ChangeNotifier {
   final FileTransferService _service = FileTransferService();
 
-  int receivedCount = 0;
+  int _receivedCount = 0;
+  int get receivedCount => _receivedCount;
 
   Future<void> startReceiving() async {
     _service.onFileReceived = () {
-      receivedCount++;
+      _receivedCount++;
       notifyListeners();
     };
+
     await _service.startServer();
   }
 
