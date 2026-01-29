@@ -55,5 +55,10 @@
 
 	<key>NSCameraUsageDescription</key>
 	<string>Scan QR codes for pairing</string>
+
+	<key>UIFileSharingEnabled</key>
+	<true/>
+	<key>LSSupportsOpeningDocumentsInPlace</key>
+	<true/>
 </dict>
 </plist>
