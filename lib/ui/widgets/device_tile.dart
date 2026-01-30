@@ -10,8 +10,11 @@ class DeviceTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return ListTile(
-      title: Text(device.name),
-      subtitle: Text('${device.ip}:${device.port}'),
+      title: Text(
+        device
+            .displayName, // ✅ UI-friendly name (e.g. Himanshu’s iPhone / EB2101)
+        style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w500),
+      ),
       onTap: onTap,
     );
   }

@@ -157,7 +157,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   items: devices.map((device) {
                     return DropdownMenuItem(
                       value: device,
-                      child: Text('${device.name} • ${device.ip}'),
+                      child: Text(device.displayName),
                     );
                   }).toList(),
                   onChanged: (device) {

@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:bonsoir/bonsoir.dart';
+import 'package:device_info_plus/device_info_plus.dart';
 
 import '../../models/peer_device.dart';
 import '../../utils/network_utils.dart';
@@ -22,6 +23,18 @@ class MdnsDiscoveryService implements DiscoveryService {
 
   bool _started = false;
 
+  Future<String> getDeviceName() async {
+    final info = DeviceInfoPlugin();
+
+    if (Platform.isIOS) {
+      final ios = await info.iosInfo;
+      return ios.name; // Himanshu’s iPhone
+    } else {
+      final android = await info.androidInfo;
+      return android.model; // EB2101
+    }
+  }
+
   @override
   Future<void> startDiscovery() async {
     if (_started) return;
@@ -29,6 +42,7 @@ class MdnsDiscoveryService implements DiscoveryService {
 
     _serviceName =
         'FlutterFileTransfer-${Platform.localHostname}-${DateTime.now().millisecondsSinceEpoch}';
+    final deviceName = await getDeviceName();
 
     /// ---------------------------
     /// 🔊 BROADCAST
@@ -38,7 +52,7 @@ class MdnsDiscoveryService implements DiscoveryService {
         name: _serviceName,
         type: serviceType,
         port: 8080,
-        attributes: {'name': _serviceName},
+        attributes: {'name': _serviceName, 'deviceName': deviceName},
       ),
     );
 
@@ -86,6 +100,7 @@ class MdnsDiscoveryService implements DiscoveryService {
       if (ip.contains(':')) return;
 
       final id = '$ip:${service.port}';
+      final displayName = service.attributes?['deviceName'] ?? service.name;
 
       /// Deduplicate
       if (_devices.containsKey(id)) return;
@@ -96,6 +111,7 @@ class MdnsDiscoveryService implements DiscoveryService {
         host: service.host!,
         ip: ip,
         port: service.port!,
+        displayName: displayName,
       );
 
       _devices[id] = device;

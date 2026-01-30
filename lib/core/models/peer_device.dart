@@ -9,12 +9,15 @@ class PeerDevice {
   /// Resolved IPv4 address (used for socket/http)
   final int port;
 
+  final String displayName;
+
   PeerDevice({
     required this.id,
     required this.name,
     required this.host,
     required this.ip,
     required this.port,
+    required this.displayName,
   });
 
   @override
