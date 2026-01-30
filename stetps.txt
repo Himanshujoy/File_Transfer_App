@@ -6,3 +6,15 @@
 6) pod install
 7) cd ..
 8) open ios/Runner.xcworkspace
+
+iOS Build Semi-Permanent App:
+1) In the top bar click on Product
+2) While holding option press Run
+3) In Info goto Build Configuration
+4) There select Profile
+
+Android Build App:
+1) Goto "android/app/build.gradle.kts", and check for applicationId "com.himanshu.fileTransferApp"
+2) Goto "android/app/src/main/AndroidManifest.xml", set android:label="File Transfer"
+3) Run flutter build apk --release --no-tree-shake-icons
+4) Find apk in "build/app/outputs/flutter-apk/app-release.apk"
