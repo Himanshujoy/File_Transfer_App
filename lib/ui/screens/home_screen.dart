@@ -129,8 +129,13 @@ class _HomeScreenState extends State<HomeScreen> {
               children: [
                 /// 🔘 START / STOP RECEIVING BUTTON
                 ElevatedButton.icon(
-                  icon: Icon(
-                    _receivingStarted ? Icons.stop_circle : Icons.download,
+                  icon: Container(
+                    width: 12,
+                    height: 12,
+                    decoration: BoxDecoration(
+                      color: _receivingStarted ? Colors.red : Colors.green,
+                      shape: BoxShape.circle,
+                    ),
                   ),
                   label: Text(
                     _receivingStarted ? 'Stop Receiving' : 'Start Receiving',
@@ -171,7 +176,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 const SizedBox(height: 24),
 
                 ElevatedButton.icon(
-                  icon: const Icon(Icons.upload),
+                  icon: const Text('🫳', style: TextStyle(fontSize: 18)),
                   label: const Text('Pick & Send'),
                   onPressed: selectedDevice == null
                       ? null
